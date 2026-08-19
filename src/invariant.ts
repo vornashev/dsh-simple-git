@@ -1,10 +1,9 @@
-import type { Context } from '@deepseek-ai/cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+type Context = { invariants: { register: (name: string, install: () => void) => () => void } }
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-client-ui-git'
+const PACKAGE_NAME = 'dsh-simple-git'
 export const name = 'client-ui-git-invariant'
 export const inject = ['invariants']
 
 /** No runtime invariant: the plugin owns only a disposable header slot entry. */
-const install: InvariantInstaller = () => {}
+const install = (): void => {}
 export const apply = (ctx: Context): Promise<() => void> => Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))

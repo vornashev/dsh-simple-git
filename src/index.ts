@@ -1,85 +1,119 @@
 /** Host half of the independently installable Git header plugin. */
 
-import type { Context } from '@deepseek-ai/cordis'
-import type { RpcResult } from '@deepseek-ai/dsh-host-apiproxy/src/api/index.ts'
-import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection/src/rpc.ts'
-import type { ShellExecutor } from '@deepseek-ai/dsh-shell/src/index.ts'
-import { WorkspaceId } from '@deepseek-ai/dsh-workspace/src/index.ts'
-import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace/src/index.ts'
+import { WorkspaceId, type WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 
-export const inject = ['connection', 'shell', 'workspaceRegistry']
+type Context = Record<string, unknown>
+type RpcResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string; details: Record<string, never> } }
+type HostConnectionHandle = { rpc: { handle: (channel: string, handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>, options: { authority: 'trusted-host' }) => unknown } }
+type ShellExecutor = { resolve: (request: { command: string; workdir: string; stdin?: string; stdoutMaxBytes?: number; timeoutMs?: number; signal?: AbortSignal; sandboxPolicy?: unknown }) => unknown; run: (spec: unknown) => Promise<{ exitCode: number | null; stderr: { text: string }; stdout: { text: string } }> }
 
 type GitFile = { path: string; additions: number; deletions: number; status: string }
 type GitStatus = { workspaceId: string; branch: string; files: GitFile[]; commits: number; clean: boolean }
 type GitPayload = { workspaceId: string; message?: string }
 
+const MAX_COMMIT_MESSAGE = 200
+const locks = new Map<string, Promise<void>>()
+
 function ok<T>(value: T): RpcResult<T> { return { ok: true, value } }
 function fail(message: string): RpcResult<never> { return { ok: false, error: { code: 'internal', message, details: {} } } }
-function gitArg(path: string): string { return JSON.stringify(path) }
+
 function parsePayload(payload: unknown): GitPayload | undefined {
   if (typeof payload !== 'object' || payload === null) return undefined
   const value = payload as Partial<GitPayload>
   if (typeof value.workspaceId !== 'string' || (value.message !== undefined && typeof value.message !== 'string')) return undefined
-  return value.message === undefined
-    ? { workspaceId: value.workspaceId }
-    : { workspaceId: value.workspaceId, message: value.message }
+  return value.message === undefined ? { workspaceId: value.workspaceId } : { workspaceId: value.workspaceId, message: value.message }
 }
 
-async function runGit(shell: ShellExecutor, workdir: string, command: string, stdin?: string): Promise<string> {
-  const result = await shell.run(shell.resolve({
-    command, workdir, stdin, stdoutMaxBytes: 2_000_000, timeoutMs: 30_000,
-    sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: workdir },
-  }))
-  if (result.exitCode !== 0) throw new Error(result.stderr.text || `git command failed with exit code ${result.exitCode ?? 'null'}`)
+export function sanitizeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.replace(/([a-z][a-z0-9+.-]*:\/\/)([^\s/@]+):([^\s/@]+)@/gi, '$1[credentials]@').slice(0, 1000)
+}
+
+async function runGit(shell: ShellExecutor, workdir: string, command: string, stdin?: string, signal?: AbortSignal): Promise<string> {
+  const result = await shell.run(shell.resolve({ command, workdir, stdin, signal, stdoutMaxBytes: 2_000_000, timeoutMs: 30_000, sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: workdir } }))
+  if (result.exitCode !== 0) throw new Error(sanitizeError(result.stderr.text || `git command failed with exit code ${result.exitCode ?? 'null'}`))
   return result.stdout.text
 }
 
-async function status(shell: ShellExecutor, workspaceId: string, path: string): Promise<GitStatus> {
-  const root = gitArg(path)
-  const [branch, porcelain, diff, commits] = await Promise.all([
-    runGit(shell, path, `git -C ${root} branch --show-current`),
-    runGit(shell, path, `git -C ${root} status --porcelain=v1`),
-    runGit(shell, path, `git -C ${root} diff HEAD --numstat`),
-    runGit(shell, path, `git -C ${root} rev-list --count HEAD --not --remotes`),
-  ])
+async function hasHead(shell: ShellExecutor, path: string, signal: AbortSignal): Promise<boolean> {
+  try { await runGit(shell, path, 'git rev-parse --verify HEAD', undefined, signal); return true } catch { return false }
+}
+
+export function parseNumstat(value: string): Map<string, [number, number]> {
   const stats = new Map<string, [number, number]>()
-  for (const line of diff.trim().split(/\r?\n/)) {
-    const [additions, deletions, file] = line.split('\t')
-    if (file !== undefined) stats.set(file, [Number(additions) || 0, Number(deletions) || 0])
+  for (const record of value.split('\0')) {
+    if (record === '') continue
+    const [rawAdditions, rawDeletions, path] = record.split('\t')
+    const additions = Number(rawAdditions)
+    const deletions = Number(rawDeletions)
+    if (path !== undefined && path !== '' && Number.isFinite(additions) && Number.isFinite(deletions)) stats.set(path, [additions, deletions])
   }
-  const files = porcelain.trim() === '' ? [] : porcelain.trim().split(/\r?\n/).map(line => {
-    const file = line.slice(3)
-    const [additions, deletions] = stats.get(file) ?? [0, 0]
-    return { path: file, additions, deletions, status: line.slice(0, 2).trim() || '?' }
-  })
+  return stats
+}
+
+export function parseStatus(value: string, stats: Map<string, [number, number]>): GitFile[] {
+  const records = value.split('\0')
+  const files: GitFile[] = []
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index]
+    if (record === '') continue
+    const status = record.slice(0, 2).trim() || '?'
+    const path = record.slice(3)
+    const [additions, deletions] = stats.get(path) ?? [0, 0]
+    files.push({ path, additions, deletions, status })
+    if (/^[RC]/.test(status) && records[index + 1] !== undefined) index += 1
+  }
+  return files
+}
+
+async function status(shell: ShellExecutor, workspaceId: string, path: string, signal: AbortSignal): Promise<GitStatus> {
+  const head = await hasHead(shell, path, signal)
+  const [branch, porcelain, diff, commits] = await Promise.all([
+    runGit(shell, path, 'git branch --show-current', undefined, signal),
+    runGit(shell, path, 'git status --porcelain=v1 -z', undefined, signal),
+    head ? runGit(shell, path, 'git diff HEAD --numstat -z', undefined, signal) : Promise.resolve(''),
+    head ? runGit(shell, path, 'git rev-list --count HEAD --not --remotes', undefined, signal) : Promise.resolve('0'),
+  ])
+  const files = parseStatus(porcelain, parseNumstat(diff))
   return { workspaceId, branch: branch.trim(), files, commits: Number(commits.trim()) || 0, clean: files.length === 0 }
 }
 
+async function withWorkspaceLock<T>(workspaceId: string, action: () => Promise<T>): Promise<T> {
+  const previous = locks.get(workspaceId) ?? Promise.resolve()
+  const current = previous.catch(() => undefined).then(action)
+  const completion = current.then(() => undefined, () => undefined)
+  locks.set(workspaceId, completion)
+  try { return await current } finally { if (locks.get(workspaceId) === completion) locks.delete(workspaceId) }
+}
+
+export const inject = ['connection', 'shell', 'workspaceRegistry']
+
 /** Register the plugin-owned Git RPC channel on the Host Connection service. */
 export function apply(ctx: Context & { connection: HostConnectionHandle; shell: ShellExecutor; workspaceRegistry: WorkspaceRegistry }): void {
-  ctx.connection.rpc.handle('/git', async (endpoint, rawPayload) => {
+  ctx.connection.rpc.handle('/simple-git', async (endpoint, rawPayload, signal) => {
     const payload = parsePayload(rawPayload)
     if (payload === undefined) return fail('Git request payload is invalid.')
     const workspace = ctx.workspaceRegistry.get(WorkspaceId(payload.workspaceId))
     if (workspace === undefined) return fail(`Workspace ${payload.workspaceId} was not found.`)
-    try {
-      if (endpoint === 'status') return ok(await status(ctx.shell, payload.workspaceId, workspace.path))
-      if (endpoint === 'commit') {
-        if (payload.message === undefined || payload.message.trim() === '') return fail('Commit message is required.')
-        const root = gitArg(workspace.path)
-        await runGit(ctx.shell, workspace.path, `git -C ${root} add -A`)
-        await runGit(ctx.shell, workspace.path, `git -C ${root} commit -F -`, `${payload.message.trim()}\n`)
-        return ok(await status(ctx.shell, payload.workspaceId, workspace.path))
+    return withWorkspaceLock(payload.workspaceId, async () => {
+      try {
+        if (endpoint === 'status') return ok(await status(ctx.shell, payload.workspaceId, workspace.path, signal))
+        if (endpoint === 'commit') {
+          const message = payload.message?.trim() ?? ''
+          if (message.length === 0) return fail('Commit message is required.')
+          if (message.length > MAX_COMMIT_MESSAGE) return fail(`Commit message must be ${MAX_COMMIT_MESSAGE} characters or fewer.`)
+          await runGit(ctx.shell, workspace.path, 'git add -A', undefined, signal)
+          await runGit(ctx.shell, workspace.path, 'git commit -F -', `${message}\n`, signal)
+          return ok(await status(ctx.shell, payload.workspaceId, workspace.path, signal))
+        }
+        if (endpoint === 'push') {
+          await runGit(ctx.shell, workspace.path, 'git push', undefined, signal)
+          return ok(await status(ctx.shell, payload.workspaceId, workspace.path, signal))
+        }
+        return fail(`Unknown Git endpoint ${endpoint}.`)
+      } catch (error: unknown) {
+        return fail(sanitizeError(error))
       }
-      if (endpoint === 'push') {
-        await runGit(ctx.shell, workspace.path, `git -C ${rootArg(workspace.path)} push`)
-        return ok(await status(ctx.shell, payload.workspaceId, workspace.path))
-      }
-      return fail(`Unknown Git endpoint ${endpoint}.`)
-    } catch (error: unknown) {
-      return { ok: false, error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
-    }
+    })
   }, { authority: 'trusted-host' })
 }
-
-function rootArg(path: string): string { return gitArg(path) }

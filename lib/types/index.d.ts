@@ -1,7 +1,6 @@
 /** Host half of the independently installable Git header plugin. */
-import type { Context } from '@deepseek-ai/cordis';
-import { WorkspaceId } from '@deepseek-ai/dsh-workspace';
-export declare const inject: string[];
+import { type WorkspaceRegistry } from '@deepseek-ai/dsh-workspace';
+type Context = Record<string, unknown>;
 type RpcResult<T> = {
     ok: true;
     value: T;
@@ -13,21 +12,24 @@ type RpcResult<T> = {
         details: Record<string, never>;
     };
 };
-type ShellRequest = {
-    command: string;
-    workdir: string;
-    stdin?: string | undefined;
-    stdoutMaxBytes: number;
-    timeoutMs: number;
-    sandboxPolicy: {
-        mode: 'danger-full-access';
-        workspaceRoot: string;
+type HostConnectionHandle = {
+    rpc: {
+        handle: (channel: string, handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>, options: {
+            authority: 'trusted-host';
+        }) => unknown;
     };
 };
-type ShellSpec = ShellRequest;
 type ShellExecutor = {
-    resolve: (request: ShellRequest) => ShellSpec;
-    run: (spec: ShellSpec) => Promise<{
+    resolve: (request: {
+        command: string;
+        workdir: string;
+        stdin?: string;
+        stdoutMaxBytes?: number;
+        timeoutMs?: number;
+        signal?: AbortSignal;
+        sandboxPolicy?: unknown;
+    }) => unknown;
+    run: (spec: unknown) => Promise<{
         exitCode: number | null;
         stderr: {
             text: string;
@@ -37,18 +39,16 @@ type ShellExecutor = {
         };
     }>;
 };
-type HostConnectionHandle = {
-    rpc: {
-        handle: (channel: string, handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>, options: {
-            authority: 'trusted-host';
-        }) => unknown;
-    };
+type GitFile = {
+    path: string;
+    additions: number;
+    deletions: number;
+    status: string;
 };
-type WorkspaceRegistry = {
-    get: (workspaceId: ReturnType<typeof WorkspaceId>) => {
-        path: string;
-    } | undefined;
-};
+export declare function sanitizeError(error: unknown): string;
+export declare function parseNumstat(value: string): Map<string, [number, number]>;
+export declare function parseStatus(value: string, stats: Map<string, [number, number]>): GitFile[];
+export declare const inject: string[];
 /** Register the plugin-owned Git RPC channel on the Host Connection service. */
 export declare function apply(ctx: Context & {
     connection: HostConnectionHandle;
@@ -56,4 +56,3 @@ export declare function apply(ctx: Context & {
     workspaceRegistry: WorkspaceRegistry;
 }): void;
 export {};
-//# sourceMappingURL=index.d.ts.map
