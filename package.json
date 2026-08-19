@@ -1,0 +1,39 @@
+{
+  "name": "@deepseek-ai/dsh-client-ui-git",
+  "version": "0.1.0",
+  "description": "Standalone Harness Git status, commit, and push header plugin",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
+    "./client": { "types": "./lib/types/client/index.d.ts", "default": "./lib/client.js" },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-client-connection": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-host-apiproxy": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-shell": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-workspace": "^0.1.0-rc.7",
+    "clsx": "^2.1.1",
+    "react": "^18.3.1"
+  },
+  "files": ["lib/index.js", "lib/invariant.js", "lib/client.js", "lib/types/**/*.d.ts", "cordis.patch.yml"],
+  "license": "MIT"
+}

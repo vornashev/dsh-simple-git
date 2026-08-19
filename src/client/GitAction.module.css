@@ -1,0 +1,19 @@
+.root { position: relative; display: inline-flex; }
+.trigger { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 0 8px; color: var(--dsw-alias-label-secondary); background: transparent; cursor: pointer; font: inherit; font-size: 12px; }
+.trigger:hover, .trigger:focus-visible { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l3); outline: none; }
+.triggerClean { color: var(--dsw-alias-label-tertiary); }
+.triggerError { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); }
+.icon { font-family: var(--dsw-font-mono); font-size: 11px; }
+.delta { color: var(--dsw-alias-state-success-primary); }
+.deleted { color: var(--dsw-alias-state-error-primary); }
+.menu { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 310px; padding: 7px; margin: 0; list-style: none; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-specific-menu); box-shadow: var(--dsw-shadow-lv3); }
+.menu::before { content: ''; position: absolute; top: -7px; right: 0; left: 0; height: 7px; }
+.row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 5px 6px; font-size: 11px; }
+.path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
+.status { color: var(--dsw-alias-label-tertiary); font-family: var(--dsw-font-mono); }
+.count { color: var(--dsw-alias-label-tertiary); font-family: var(--dsw-font-mono); }
+.footer { border-top: 1px solid var(--dsw-alias-border-l2); margin-top: 5px; padding: 7px 6px 2px; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.push, .retry { margin-left: 6px; border: 0; color: var(--dsw-static-deepseek-500); background: transparent; cursor: pointer; font: inherit; font-size: 11px; }
+.errorDetail { display: grid; gap: 5px; padding: 7px 6px; color: var(--dsw-alias-state-error-primary); font-size: 11px; line-height: 1.35; }
+.errorDetail strong { color: var(--dsw-alias-label-primary); font-size: 12px; }
+.errorDetail .retry { justify-self: start; margin-left: 0; padding: 0; }
