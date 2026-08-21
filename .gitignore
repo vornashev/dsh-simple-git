@@ -1,3 +1,4 @@
 node_modules/
 *.tsbuildinfo
 *.map
+.dsh_better_edit/

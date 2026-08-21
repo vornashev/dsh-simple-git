@@ -23,5 +23,8 @@
 .errorDetail strong { color: var(--dsw-alias-label-primary); font-size: 12px; }
 .errorDetail .retry { justify-self: start; margin-left: 0; padding: 0; }
 .live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.spinner { display: inline-block; width: 11px; height: 11px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: git-spin .7s linear infinite; vertical-align: -2px; }
+.loading { display: flex; align-items: center; gap: 8px; padding: 14px 8px; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+@keyframes git-spin { to { transform: rotate(360deg); } }
 @media (max-width: 480px) { .menu { position: fixed; top: 52px; right: 8px; left: 8px; width: auto; max-width: none; } }
-@media (prefers-reduced-motion: reduce) { .menu { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: reduce) { .menu { scroll-behavior: auto; } .spinner { animation-duration: 1.5s; } }

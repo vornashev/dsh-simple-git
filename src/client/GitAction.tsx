@@ -39,8 +39,9 @@ export function GitAction({ sessionId, useSessions, useWorkspaces, status, commi
   const title = useSessions(state => state.byId[sessionId]?.displayTitle) ?? 'workspace update'
   const [snapshot, setSnapshot] = useState<GitStatus | undefined>()
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [operation, setOperation] = useState<'refreshing' | 'committing' | 'pushing' | undefined>()
   const [error, setError] = useState<string | undefined>()
+  const [feedback, setFeedback] = useState<string | undefined>()
   const [message, setMessage] = useState('')
   const sequence = useRef(0)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -54,6 +55,8 @@ export function GitAction({ sessionId, useSessions, useWorkspaces, status, commi
       setError('This session is not attached to a workspace.')
       return
     }
+    setOperation('refreshing')
+    setFeedback(undefined)
     try {
       const next = await status(requestedWorkspace)
       if (request !== sequence.current || requestedWorkspace !== workspaceId) return
@@ -62,12 +65,16 @@ export function GitAction({ sessionId, useSessions, useWorkspaces, status, commi
       setError(undefined)
     } catch (reason: unknown) {
       if (request === sequence.current) setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      if (request === sequence.current) setOperation(undefined)
     }
   }, [workspaceId, status])
 
   useEffect(() => {
     setSnapshot(undefined)
     setError(undefined)
+    setFeedback(undefined)
+    setOperation(undefined)
     setMessage('')
     void refresh()
   }, [workspaceId, refresh])
@@ -76,19 +83,20 @@ export function GitAction({ sessionId, useSessions, useWorkspaces, status, commi
     additions: result.additions + file.additions, deletions: result.deletions + file.deletions,
   }), { additions: 0, deletions: 0 }), [snapshot?.files])
 
-  const run = async (operation: (id: string) => Promise<GitStatus>): Promise<void> => {
+  const run = async (action: (id: string) => Promise<GitStatus>, kind: 'committing' | 'pushing'): Promise<void> => {
     const requestedWorkspace = workspaceId
-    if (requestedWorkspace === undefined || busy) return
+    if (requestedWorkspace === undefined || operation !== undefined) return
     const request = ++sequence.current
-    setBusy(true); setError(undefined)
+    setOperation(kind); setError(undefined); setFeedback(undefined)
     try {
-      const next = await operation(requestedWorkspace)
+      const next = await action(requestedWorkspace)
       if (request !== sequence.current || !isGitStatus(next) || next.workspaceId !== requestedWorkspace) return
       setSnapshot(next); setMessage('')
+      setFeedback(kind === 'committing' ? 'Changes committed successfully.' : 'Changes pushed successfully.')
     } catch (reason: unknown) {
       if (request === sequence.current) setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
-      if (request === sequence.current) setBusy(false)
+      if (request === sequence.current) setOperation(undefined)
     }
   }
 
@@ -97,19 +105,20 @@ export function GitAction({ sessionId, useSessions, useWorkspaces, status, commi
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape') { setOpen(false); triggerRef.current?.focus() }
   }
-  const errorMessage = error ?? (snapshot === undefined ? 'Loading Git status…' : undefined)
-  const triggerLabel = error !== undefined ? 'Git error' : snapshot === undefined ? 'Git status loading' : snapshot.clean ? `Git: ${snapshot.commits} unpushed commits` : `Commit all ${snapshot.files.length} changed files`
+  const busy = operation !== undefined
+  const loading = operation === 'refreshing' || snapshot === undefined
+  const triggerLabel = error !== undefined ? 'Git error' : loading ? 'Git status loading' : snapshot.clean ? `Git: ${snapshot.commits} unpushed commits` : `Commit all ${snapshot.files.length} changed files`
 
   return (
     <div className={css.root} onKeyDown={onKeyDown}>
       <button ref={triggerRef} type="button" className={clsx(css.trigger, snapshot?.clean && css.triggerClean, error !== undefined && css.triggerError)} aria-expanded={open} aria-haspopup="dialog" aria-controls={panelId} aria-label={triggerLabel} aria-busy={busy} onClick={() => { setOpen(value => !value) }} disabled={busy}>
-        <span className={css.icon} aria-hidden="true">{error !== undefined ? '!' : snapshot === undefined ? '…' : snapshot.clean ? '✓' : '↥'}</span>
-        {error !== undefined ? <span>Git error</span> : snapshot === undefined ? <span>Git…</span> : snapshot.clean ? <span>{snapshot.commits} unpushed commits</span> : <><span>{snapshot.files.length} files</span><span className={css.delta}>+{totals.additions}</span><span className={css.deleted}>−{totals.deletions}</span></>}
+        <span className={css.icon} aria-hidden="true">{busy ? <span className={css.spinner} /> : error !== undefined ? '!' : snapshot === undefined ? '…' : snapshot.clean ? '✓' : '↥'}</span>
+        {error !== undefined ? <span>Git error</span> : loading ? <span>{operation === 'committing' ? 'Committing…' : operation === 'pushing' ? 'Pushing…' : 'Git…'}</span> : snapshot.clean ? <span>{snapshot.commits} unpushed commits</span> : <><span>{snapshot.files.length} files</span><span className={css.delta}>+{totals.additions}</span><span className={css.deleted}>−{totals.deletions}</span></>}
       </button>
       {open && <div id={panelId} className={css.menu} role="dialog" aria-label="Git status" aria-modal="false">
-        {errorMessage !== undefined ? <div className={css.errorDetail} role={error !== undefined ? 'alert' : 'status'}><strong>{error !== undefined ? 'Git is unavailable' : 'Checking Git status'}</strong><span>{errorMessage}</span>{error !== undefined && <button type="button" className={css.retry} onClick={() => { void refresh() }} disabled={busy}>Retry</button>}</div> : snapshot?.files.length === 0 ? <div className={css.footer}>Working tree clean on {snapshot.branch || 'detached HEAD'}.</div> : <ul>{snapshot?.files.map(file => <li className={css.row} key={`${file.status}:${file.path}`}><span className={css.path} title={file.path}>{file.path}</span><span className={css.status}>{file.status}</span><span className={css.count}><b className={css.delta}>+{file.additions}</b> <b className={css.deleted}>−{file.deletions}</b></span></li>)}</ul>}
-        {snapshot !== undefined && error === undefined && <div className={css.footer} aria-busy={busy}><label className={css.messageLabel} htmlFor={`${panelId}-message`}>Commit message</label><input id={`${panelId}-message`} className={css.message} value={message} onChange={event => { setMessage(event.target.value) }} placeholder={defaultMessage} maxLength={200} disabled={busy || snapshot.clean} />{snapshot.clean ? <><span>{snapshot.commits} unpushed commits</span><button type="button" className={css.push} onClick={() => { void run(push) }} disabled={busy || snapshot.commits === 0}>Push to Git</button></> : <button type="button" className={css.push} onClick={() => { void run(id => commit(id, commitMessage)) }} disabled={busy || commitMessage.length === 0}>{busy ? 'Committing…' : `Commit all ${snapshot.files.length} files`}</button>}</div>}
-        <div className={css.live} role="status" aria-live="polite">{busy ? 'Git operation in progress…' : error ?? ''}</div>
+        {error !== undefined ? <div className={css.errorDetail} role="alert"><strong>Git is unavailable</strong><span>{error}</span><button type="button" className={css.retry} onClick={() => { void refresh() }} disabled={busy}>{busy ? 'Retrying…' : 'Retry'}</button></div> : loading ? <div className={css.loading} role="status" aria-busy="true"><span className={css.spinner} aria-hidden="true" /><span>Checking Git status…</span></div> : snapshot?.files.length === 0 ? <div className={css.footer}>Working tree clean on {snapshot.branch || 'detached HEAD'}.</div> : <ul>{snapshot?.files.map(file => <li className={css.row} key={`${file.status}:${file.path}`}><span className={css.path} title={file.path}>{file.path}</span><span className={css.status}>{file.status}</span><span className={css.count}><b className={css.delta}>+{file.additions}</b> <b className={css.deleted}>−{file.deletions}</b></span></li>)}</ul>}
+        {snapshot !== undefined && error === undefined && <div className={css.footer} aria-busy={busy}><label className={css.messageLabel} htmlFor={`${panelId}-message`}>Commit message</label><input id={`${panelId}-message`} className={css.message} value={message} onChange={event => { setMessage(event.target.value); setFeedback(undefined) }} placeholder={defaultMessage} maxLength={200} disabled={busy || snapshot.clean} />{snapshot.clean ? <><span>{snapshot.commits} unpushed commits</span><button type="button" className={css.push} onClick={() => { void run(push, 'pushing') }} disabled={busy || snapshot.commits === 0}>{operation === 'pushing' ? <><span className={css.spinner} /> Pushing…</> : 'Push to Git'}</button></> : <button type="button" className={css.push} onClick={() => { void run(id => commit(id, commitMessage), 'committing') }} disabled={busy || commitMessage.length === 0}>{operation === 'committing' ? <><span className={css.spinner} /> Committing…</> : `Commit all ${snapshot.files.length} files`}</button>}</div>}
+        <div className={css.live} role="status" aria-live="polite">{busy ? `${operation === 'refreshing' ? 'Refreshing' : operation === 'committing' ? 'Committing' : 'Pushing'} Git…` : error ?? feedback ?? ''}</div>
       </div>}
     </div>
   )
