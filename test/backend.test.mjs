@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseNumstat, parseStatus, sanitizeError } from '../lib/index.js'
+import { formatGitError, parseNumstat, parseStatus, sanitizeError } from '../lib/index.js'
 
 test('parses NUL-delimited numstat and status records', () => {
   const stats = parseNumstat('3\t1\tchanged.ts\0-\t-\tbinary.bin\0')
@@ -19,6 +19,12 @@ test('keeps special characters in filenames', () => {
 
 test('redacts credentials from Git errors', () => {
   assert.equal(sanitizeError('fatal: https://alice:secret@example.com/repo.git denied'), 'fatal: https://[credentials]@example.com/repo.git denied')
+})
+
+test('turns common Git failures into actionable messages', () => {
+  assert.equal(formatGitError('git push', 1, "error: failed to push some refs\n hint: Updates were rejected because the remote contains work"), 'Push отклонён: удалённая ветка содержит изменения. Сначала выполните pull или rebase.')
+  assert.equal(formatGitError('git commit -F -', 1, 'nothing to commit, working tree clean'), 'Нет изменений для коммита.')
+  assert.equal(formatGitError('git push', 1, 'fatal: No configured push destination.'), 'Для репозитория не настроен удалённый репозиторий (remote).')
 })
 
 test('does not interpolate workspace paths into Git commands', async () => {

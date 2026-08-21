@@ -45,6 +45,7 @@ type GitFile = {
     deletions: number;
     status: string;
 };
+export declare function formatGitError(command: string, exitCode: number | null, stderr: string, stdout?: string): string;
 export declare function sanitizeError(error: unknown): string;
 export declare function parseNumstat(value: string): Map<string, [number, number]>;
 export declare function parseStatus(value: string, stats: Map<string, [number, number]>): GitFile[];

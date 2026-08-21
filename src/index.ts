@@ -24,6 +24,25 @@ function parsePayload(payload: unknown): GitPayload | undefined {
   return value.message === undefined ? { workspaceId: value.workspaceId } : { workspaceId: value.workspaceId, message: value.message }
 }
 
+function cleanGitOutput(value: string): string {
+  return value.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '').trim()
+}
+
+export function formatGitError(command: string, exitCode: number | null, stderr: string, stdout = ''): string {
+  const detail = cleanGitOutput(stderr || stdout)
+  const lower = detail.toLowerCase()
+  if (lower.includes('nothing to commit')) return 'Нет изменений для коммита.'
+  if (lower.includes('not a git repository')) return 'Эта папка не является Git-репозиторием.'
+  if (lower.includes('author identity unknown') || lower.includes('please tell me who you are')) return 'Git не знает имя и email автора. Настройте user.name и user.email.'
+  if (lower.includes('no configured push destination')) return 'Для репозитория не настроен удалённый репозиторий (remote).'
+  if (lower.includes('has no upstream branch')) return 'Для текущей ветки не настроена удалённая upstream-ветка.'
+  if (lower.includes('non-fast-forward') || lower.includes('[rejected]') || lower.includes('fetch first') || lower.includes('remote contains work') || lower.includes('rejected')) return 'Push отклонён: удалённая ветка содержит изменения. Сначала выполните pull или rebase.'
+  if (lower.includes('src refspec') && lower.includes('does not match any')) return 'Не удалось выполнить push: текущая ветка ещё не содержит коммитов или не существует.'
+  if (lower.includes('could not read username') || lower.includes('authentication failed') || lower.includes('permission denied')) return 'Не удалось выполнить push: Git не смог пройти аутентификацию или у вас нет доступа к репозиторию.'
+  if (detail !== '') return detail.slice(0, 1000)
+  return `git ${command.replace(/^git\s+/, '')} завершился с кодом ${exitCode ?? 'неизвестно'}.`
+}
+
 export function sanitizeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return message.replace(/([a-z][a-z0-9+.-]*:\/\/)([^\s/@]+):([^\s/@]+)@/gi, '$1[credentials]@').slice(0, 1000)
@@ -31,7 +50,7 @@ export function sanitizeError(error: unknown): string {
 
 async function runGit(shell: ShellExecutor, workdir: string, command: string, stdin?: string, signal?: AbortSignal): Promise<string> {
   const result = await shell.run(shell.resolve({ command, workdir, stdin, signal, stdoutMaxBytes: 2_000_000, timeoutMs: 30_000, sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: workdir } }))
-  if (result.exitCode !== 0) throw new Error(sanitizeError(result.stderr.text || `git command failed with exit code ${result.exitCode ?? 'null'}`))
+  if (result.exitCode !== 0) throw new Error(sanitizeError(formatGitError(command, result.exitCode, result.stderr.text, result.stdout.text)))
   return result.stdout.text
 }
 
