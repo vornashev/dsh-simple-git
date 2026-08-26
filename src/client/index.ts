@@ -17,6 +17,8 @@ export function apply(ctx: ClientContext & { connection: ConnectionHandle }): vo
     unwrap<T>(await ctx.connection.rpc.call('/simple-git', endpoint, payload))
   const injected = (): GitActionInjected => ({
     status: workspaceId => call('status', { workspaceId }),
+    init: workspaceId => call('init', { workspaceId }),
+    connectRemote: (workspaceId, url) => call('remote', { workspaceId, url }),
     commit: (workspaceId, message) => call('commit', { workspaceId, message }),
     push: workspaceId => call('push', { workspaceId }),
   })

@@ -19,6 +19,15 @@ type HostConnectionHandle = {
         }) => unknown;
     };
 };
+type ShellRunResult = {
+    exitCode: number | null;
+    stderr: {
+        text: string;
+    };
+    stdout: {
+        text: string;
+    };
+};
 type ShellExecutor = {
     resolve: (request: {
         command: string;
@@ -29,15 +38,7 @@ type ShellExecutor = {
         signal?: AbortSignal;
         sandboxPolicy?: unknown;
     }) => unknown;
-    run: (spec: unknown) => Promise<{
-        exitCode: number | null;
-        stderr: {
-            text: string;
-        };
-        stdout: {
-            text: string;
-        };
-    }>;
+    run: (spec: unknown) => Promise<ShellRunResult>;
 };
 type GitFile = {
     path: string;
@@ -47,6 +48,7 @@ type GitFile = {
 };
 export declare function formatGitError(command: string, exitCode: number | null, stderr: string, stdout?: string): string;
 export declare function sanitizeError(error: unknown): string;
+export declare function normalizeGitHubRemote(value: string): string;
 export declare function parseNumstat(value: string): Map<string, [number, number]>;
 export declare function parseStatus(value: string, stats: Map<string, [number, number]>): GitFile[];
 export declare const inject: string[];
