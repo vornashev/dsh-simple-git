@@ -1,6 +1,6 @@
 {
 	"name": "dsh-simple-git",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Standalone Harness Git status, commit, and push header plugin",
 	"type": "module",
 	"main": "lib/index.js",
@@ -22,7 +22,6 @@
 	},
 	"scripts": {
 		"build": "tsc && tsdown --config tsdown.config.ts",
-		"prepare": "tsc && tsdown --config tsdown.config.ts",
 		"typecheck": "tsc --noEmit",
 		"check": "pnpm run typecheck && pnpm run build",
 		"test": "node --test"
