@@ -1,6 +1,6 @@
 {
 	"name": "dsh-simple-git",
-	"version": "0.3.2",
+	"version": "0.3.3",
 	"description": "Standalone Harness Git status, commit, and push header plugin",
 	"type": "module",
 	"main": "lib/index.js",
@@ -48,7 +48,6 @@
 		"@deepseek-ai/dsh-host-apiproxy": "^0.1.0-rc.7",
 		"@deepseek-ai/dsh-shell": "^0.1.0-rc.7",
 		"@deepseek-ai/dsh-workspace": "^0.1.0-rc.7",
-		"clsx": "^2.1.1",
 		"react": "^18.3.1"
 	},
 	"devDependencies": {

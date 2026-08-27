@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import clsx from 'clsx'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './GitAction.module.css'
 
@@ -8,6 +7,10 @@ type GitStatus =
   | { workspaceId: string; initialized: false }
   | { workspaceId: string; initialized: true; branch: string; files: GitFile[]; commits: number; clean: boolean; originConfigured: boolean; upstreamConfigured: boolean }
 type Operation = 'refreshing' | 'initializing' | 'connecting' | 'committing' | 'pushing'
+
+function classNames(...values: Array<string | false | null | undefined>): string {
+  return values.filter((value): value is string => typeof value === 'string').join(' ')
+}
 
 export interface GitActionInjected {
   status: (workspaceId: string) => Promise<GitStatus>
@@ -159,7 +162,7 @@ export function GitAction({ sessionId, useSessions, useWorkspaces, status, init,
       <button
         ref={triggerRef}
         type="button"
-        className={clsx(css.trigger, snapshot?.initialized === false && css.triggerSetup, repository?.clean && css.triggerClean, statusError !== undefined && css.triggerError)}
+        className={classNames(css.trigger, snapshot?.initialized === false && css.triggerSetup, repository?.clean && css.triggerClean, statusError !== undefined && css.triggerError)}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls={panelId}

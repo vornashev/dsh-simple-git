@@ -15,7 +15,7 @@ Version 0.3.0 adds a complete first-use workflow for workspaces that do not have
 - repository-root checks prevent a nested workspace from staging or committing files from an enclosing repository;
 - expected Git setup states are detected without depending on localized Git diagnostics or shell-specific exit-code propagation.
 
-Version 0.3.1 made the GitHub package installable without running build scripts. Version 0.3.2 makes repository probes portable across Bash and PowerShell, whose process wrapper normalizes native Git failures to exit code 1.
+Version 0.3.1 made the GitHub package installable without running build scripts. Version 0.3.2 makes repository probes portable across Bash and PowerShell, whose process wrapper normalizes native Git failures to exit code 1. Version 0.3.3 removes the external `clsx` runtime dependency and uses a small local class-name helper, so the client plugin can start in isolated installations.
 
 ## Initialize and connect a workspace
 
@@ -33,7 +33,7 @@ Connect GitHub accepts standard `https://github.com/owner/repository[.git]` and 
 Use an immutable tag or commit in production:
 
 ```sh
-dsh plugin --profile web add github:vornashev/dsh-simple-git#v0.3.2
+dsh plugin --profile web add github:vornashev/dsh-simple-git#v0.3.3
 dsh --profile web
 ```
 

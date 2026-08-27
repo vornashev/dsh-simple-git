@@ -20,4 +20,5 @@ test('client artifact uses isolated RPC channel and accessible disclosure', () =
   assert.match(client, /git-spin/)
   assert.doesNotMatch(client, /git\.status/)
   assert.doesNotMatch(client, /workspaceId!/)
+  assert.doesNotMatch(client, /clsx/)
 })
