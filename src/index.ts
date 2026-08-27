@@ -68,38 +68,31 @@ async function runGit(shell: ShellExecutor, workdir: string, command: string, st
   return result.stdout.text
 }
 
+async function probeGit(shell: ShellExecutor, path: string, command: string, signal: AbortSignal): Promise<string> {
+  const probeCommand = `${command}; exit 0`
+  const result = await executeGit(shell, path, probeCommand, undefined, signal)
+  if (result.exitCode !== 0) throw new Error(sanitizeError(formatGitError(command, result.exitCode, result.stderr.text, result.stdout.text)))
+  return cleanGitOutput(result.stdout.text)
+}
+
 /** True only when the registered workspace itself is the worktree root. */
 async function isRepository(shell: ShellExecutor, path: string, signal: AbortSignal): Promise<boolean> {
-  const command = 'git rev-parse --is-inside-work-tree --show-prefix'
-  const result = await executeGit(shell, path, command, undefined, signal)
-  if (result.exitCode === 128) return false
-  if (result.exitCode !== 0) throw new Error(sanitizeError(formatGitError(command, result.exitCode, result.stderr.text, result.stdout.text)))
-  const lines = cleanGitOutput(result.stdout.text).split(/\r?\n/)
+  await runGit(shell, path, 'git --version', undefined, signal)
+  const output = await probeGit(shell, path, 'git rev-parse --is-inside-work-tree --show-prefix', signal)
+  const lines = output.split(/\r?\n/)
   return lines.length === 1 && lines[0] === 'true'
 }
 
 async function hasHead(shell: ShellExecutor, path: string, signal: AbortSignal): Promise<boolean> {
-  const command = 'git rev-parse --verify --quiet HEAD'
-  const result = await executeGit(shell, path, command, undefined, signal)
-  if (result.exitCode === 0) return true
-  if (result.exitCode === 1) return false
-  throw new Error(sanitizeError(formatGitError(command, result.exitCode, result.stderr.text, result.stdout.text)))
+  return await probeGit(shell, path, 'git rev-parse --verify --quiet HEAD', signal) !== ''
 }
 
 async function hasOrigin(shell: ShellExecutor, path: string, signal: AbortSignal): Promise<boolean> {
-  const command = 'git config --get remote.origin.url'
-  const result = await executeGit(shell, path, command, undefined, signal)
-  if (result.exitCode === 0) return cleanGitOutput(result.stdout.text) !== ''
-  if (result.exitCode === 1) return false
-  throw new Error(sanitizeError(formatGitError(command, result.exitCode, result.stderr.text, result.stdout.text)))
+  return await probeGit(shell, path, 'git config --get remote.origin.url', signal) !== ''
 }
 
 async function hasUpstream(shell: ShellExecutor, path: string, signal: AbortSignal): Promise<boolean> {
-  const command = "git rev-parse --verify --quiet '@{upstream}'"
-  const result = await executeGit(shell, path, command, undefined, signal)
-  if (result.exitCode === 0) return true
-  if (result.exitCode === 1) return false
-  throw new Error(sanitizeError(formatGitError(command, result.exitCode, result.stderr.text, result.stdout.text)))
+  return await probeGit(shell, path, "git rev-parse --verify --quiet '@{upstream}'", signal) !== ''
 }
 
 export function normalizeGitHubRemote(value: string): string {

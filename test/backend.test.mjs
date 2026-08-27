@@ -25,14 +25,15 @@ function createRpcHarness(respond) {
 
 function repositoryResponse({ branch = 'main', head = true, origin = false, upstream = false } = {}) {
   return command => {
-    if (command === 'git rev-parse --is-inside-work-tree --show-prefix') return gitResult(0, 'true\n')
-    if (command === 'git rev-parse --verify --quiet HEAD') return head ? gitResult(0, 'abc123\n') : gitResult(1, '', 'révision absente')
+    if (command === 'git --version') return gitResult(0, 'git version 2.50.0\n')
+    if (command === 'git rev-parse --is-inside-work-tree --show-prefix; exit 0') return gitResult(0, 'true\n')
+    if (command === 'git rev-parse --verify --quiet HEAD; exit 0') return head ? gitResult(0, 'abc123\n') : gitResult(0, '', 'révision absente')
     if (command === 'git branch --show-current') return gitResult(0, `${branch}\n`)
     if (command === 'git status --porcelain=v1 -z') return gitResult()
     if (command === 'git diff HEAD --numstat -z') return gitResult()
     if (command === 'git rev-list --count HEAD --not --remotes') return gitResult(0, '1\n')
-    if (command === 'git config --get remote.origin.url') return origin ? gitResult(0, 'https://github.com/acme/widgets.git\n') : gitResult(1, '', 'kein Remote konfiguriert')
-    if (command === "git rev-parse --verify --quiet '@{upstream}'") return upstream ? gitResult(0, 'abc123\n') : gitResult(1, '', 'aucune branche amont')
+    if (command === 'git config --get remote.origin.url; exit 0') return origin ? gitResult(0, 'https://github.com/acme/widgets.git\n') : gitResult(0, '', 'kein Remote konfiguriert')
+    if (command === "git rev-parse --verify --quiet '@{upstream}'; exit 0") return upstream ? gitResult(0, 'abc123\n') : gitResult(0, '', 'aucune branche amont')
     if (command === 'git push' || command === 'git push -u origin HEAD') return gitResult()
     throw new Error(`Unexpected Git command: ${command}`)
   }
@@ -69,15 +70,20 @@ test('rejects credential-bearing, non-GitHub, and shell-like remotes', () => {
 })
 
 test('returns a neutral status for a workspace without a repository', async () => {
-  const harness = createRpcHarness(() => gitResult(128, '', 'kein Git-Repository'))
+  const harness = createRpcHarness(command => {
+    if (command === 'git --version') return gitResult(0, 'git version 2.50.0\n')
+    if (command === 'git rev-parse --is-inside-work-tree --show-prefix; exit 0') return gitResult(0, '', 'kein Git-Repository')
+    throw new Error(`Unexpected Git command: ${command}`)
+  })
   const result = await harness.request('status')
   assert.deepEqual(result, { ok: true, value: { workspaceId: 'workspace', initialized: false } })
-  assert.deepEqual(harness.commands, ['git rev-parse --is-inside-work-tree --show-prefix'])
+  assert.deepEqual(harness.commands, ['git --version', 'git rev-parse --is-inside-work-tree --show-prefix; exit 0'])
 })
 
 test('does not treat a nested workspace as its enclosing repository root', async () => {
   const harness = createRpcHarness(command => {
-    if (command === 'git rev-parse --is-inside-work-tree --show-prefix') return gitResult(0, 'true\nparent/workspace/\n')
+    if (command === 'git --version') return gitResult(0, 'git version 2.50.0\n')
+    if (command === 'git rev-parse --is-inside-work-tree --show-prefix; exit 0') return gitResult(0, 'true\nparent/workspace/\n')
     throw new Error(`Unexpected Git command: ${command}`)
   })
   const status = await harness.request('status')
@@ -87,7 +93,7 @@ test('does not treat a nested workspace as its enclosing repository root', async
   assert.equal(harness.commands.includes('git add -A'), false)
 })
 
-test('uses exit codes rather than localized diagnostics for expected setup states', async () => {
+test('uses probe output rather than localized diagnostics or shell-normalized exit codes', async () => {
   const harness = createRpcHarness(repositoryResponse({ head: false, origin: false }))
   const result = await harness.request('status')
   assert.equal(result.ok, true)

@@ -13,9 +13,10 @@ Version 0.3.0 adds a complete first-use workflow for workspaces that do not have
 - an existing GitHub repository can be connected as `origin` with an HTTPS or SSH URL;
 - the first push configures upstream automatically, while later pushes use the existing upstream;
 - repository-root checks prevent a nested workspace from staging or committing files from an enclosing repository;
-- expected Git setup states are detected through stable exit codes, so localized Git diagnostics do not break the workflow.
+- expected Git setup states are detected without depending on localized Git diagnostics or shell-specific exit-code propagation.
 
-Version 0.3.1 is the installable patch release: generated artifacts are shipped in the repository, so GitHub installation does not need to run package build scripts.
+Version 0.3.1 made the GitHub package installable without running build scripts. Version 0.3.2 makes repository probes portable across Bash and PowerShell, whose process wrapper normalizes native Git failures to exit code 1.
+
 ## Initialize and connect a workspace
 
 A workspace that is not yet a Git repository is treated as a normal first-use state rather than an error. Open the neutral **Set up Git** control to follow this flow:
@@ -32,7 +33,7 @@ Connect GitHub accepts standard `https://github.com/owner/repository[.git]` and 
 Use an immutable tag or commit in production:
 
 ```sh
-dsh plugin --profile web add github:vornashev/dsh-simple-git#v0.3.1
+dsh plugin --profile web add github:vornashev/dsh-simple-git#v0.3.2
 dsh --profile web
 ```
 
